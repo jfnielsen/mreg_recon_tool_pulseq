@@ -1,7 +1,7 @@
 Toolbox for acquiring and reconstructing MREG data with Pulseq. 
 
 Image Acquisition:
-For implenmenting Pulseq at your scanner, please see https://pulseq.github.io/ for more information
+For implementing Pulseq at your scanner, please see https://pulseq.github.io/ for more information
 
 For details about image acquisition please refer to  mreg_pulseq_manual.pdf
 
