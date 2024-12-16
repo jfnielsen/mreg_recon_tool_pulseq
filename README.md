@@ -1,7 +1,11 @@
-Toolbox for reconstructing MREG data acquired with Pulseq. Call mreg_recon_tool for starting the GUI.
+Toolbox for acquiring and reconstructing MREG data with Pulseq. 
+Image Acquisition:
+For implenmenting Pulseq at your scanner, please see https://pulseq.github.io/ for more information
+For details about image acquisition please refer to the manual mreg_pulseq_manual.pdf
 
 
-
+Reconstruction:
+Call mreg_recon_tool for starting the GUI.
 Dependencies: 
 You need the MIRT toolbox which you can be download from 
 http://web.eecs.umich.edu/~fessler/code/ 
