@@ -30,9 +30,10 @@ For the spirals in the creation of a spherical stack of spirals, modified code f
 
 
 Contributions to this toolbox have been made by:
-Thimo Hugger
-Benjamin Zahneisen
-Jakob Assländer
-Bruno Riemenschneider
-Antonia Barghoorn
+
+Thimo Hugger  
+Benjamin Zahneisen  
+Jakob Assländer  
+Bruno Riemenschneider  
+Antonia Barghoorn  
 
