@@ -1,9 +1,10 @@
 Toolbox for acquiring and reconstructing MREG data with Pulseq. 
+Please be aware that this initial implementation represents MREG in its most basic form and does not allow aquisition with multi-shot trajectories nor reconstruction using sliding-window analysis yet.
 
 Image Acquisition:
 For implementing Pulseq at your scanner, please see https://pulseq.github.io/ for more information
 
-For details about image acquisition please refer to  mreg_pulseq_manual.pdf
+For details about image acquisition please refer to  mreg_pulseq_manual.pdf in the folder Pulseq_sequence
 
 
 Reconstruction:
