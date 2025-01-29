@@ -1,0 +1,653 @@
+#include "mex.h"
+#include "matrix.h"
+#include <math.h>
+#include <complex>
+#include <unistd.h>
+//#include "fftw3.h"
+
+
+#include "cufft.h"
+#include "cuda_runtime.h"
+#include <cuda.h> 
+//#include <cublas.h>
+
+
+#include <stdio.h>
+#include <string>
+#include <iostream>
+#include <sys/time.h>
+
+
+#include <string.h>
+#include <sys/time.h>
+
+#define GET_TIME(now) { \
+   struct timeval t; \
+   gettimeofday(&t, NULL); \
+   now = t.tv_sec + t.tv_usec/1000000.0; \
+}
+
+
+#define MAX_BLOCK_SZ 2048
+
+#include "tikreg_CG_kernels_d_off.cu"
+
+void mexFunction( int nlhs, mxArray *plhs[], int nrhs, const mxArray *prhs[] )
+{
+	int i,j;
+
+    if(nrhs != 13 ) {
+	printf("\nUsage:\n");
+    return;
+	} else if(nlhs>1) {
+	printf("Too many output arguments\n");
+    return;
+	}
+
+    //////////////////////////////////// fetching data from MATLAB
+
+    int pcnt = 0;  
+    const mxArray *Measurement;
+    Measurement = prhs[pcnt++];       
+    std::complex<double> *meas = 
+		( std::complex<double> *) mxGetData(Measurement);
+    
+    const mxArray *Sens;
+	Sens = prhs[pcnt++];       
+	const mwSize *dims_sens = mxGetDimensions(Sens);
+    const mwSize numdim_sens = mxGetNumberOfDimensions(Sens);
+    std::complex<double> *sens = ( std::complex<double> *) mxGetData(Sens);
+    
+    int numsens;
+    if (numdim_sens == 4)
+        numsens = 1;
+    else
+        numsens = dims_sens[4];
+        
+    const int numdim =4;
+    const mwSize dims_sz[] = {2, dims_sens[1], dims_sens[2], dims_sens[3] };
+    int w = (int)dims_sz[1];
+    int h = (int)dims_sz[2];
+    int d = (int)dims_sz[3];
+    int totsz = w*h*d;
+    mexPrintf("dims w: %d h: %d d: %d totsz: %d\n",w,h,d,totsz);
+           
+    //Modified by Sandy (Begin)
+    const mxArray *Ipk_index;
+    Ipk_index = prhs[pcnt++];       
+    const int numSeg = mxGetM(Ipk_index);
+    const mwSize *dims_ipk[numSeg];
+	int numP;
+	int numK[numSeg];
+	int *ipk_index[numSeg];
+	mxArray *seg;
+	for(j=0;j<numSeg;j++)
+	{
+		seg=mxGetCell(Ipk_index, j);
+		dims_ipk[j]  = mxGetDimensions(seg);
+		ipk_index[j] = (int*) mxGetData(seg);
+  
+		numK[j] = (dims_ipk[j])[1];
+	}
+	numP = (dims_ipk[1])[0];
+
+    const mxArray *Ipk_we;
+    Ipk_we = prhs[pcnt++];       
+    std::complex<double> *ipk_we[numSeg];
+	for(j=0;j<numSeg;j++)
+	{
+		seg=mxGetCell(Ipk_we, j);
+		ipk_we[j] = (std::complex<double>*) mxGetData(seg);
+	}
+
+    const mxArray *Dims_pad;
+    Dims_pad = prhs[pcnt++];       
+    double *dims_pad_d = (double*) mxGetData(Dims_pad);
+    int w_pad = (int)dims_pad_d[0];
+    int h_pad = (int)dims_pad_d[1];
+    int d_pad = (int)dims_pad_d[2];
+    int totsz_pad  = w_pad*h_pad*d_pad;
+    mexPrintf("dims_pad w: %d h: %d d: %d totsz: %d\n",w_pad,h_pad,d_pad,totsz_pad);
+
+    
+    const mxArray *BPidx;
+    BPidx = prhs[pcnt++]; 
+	int *bpidx[numSeg];
+	int numVox[numSeg];
+	for(j=0;j<numSeg;j++)
+	{
+		seg=mxGetCell(BPidx, j);
+		numVox[j]=mxGetM(seg);
+		bpidx[j]=(int*) mxGetData(seg);
+	}
+    //int numVox= mxGetM(BPidx);
+    //int * bpidx = (int*) mxGetData(BPidx);
+    
+    const mxArray *BPmidx;
+    BPmidx = prhs[pcnt++];       
+   
+    const mxArray *BPweight;
+    BPweight = prhs[pcnt++];       
+
+	const mxArray *TrajLen;
+	TrajLen = prhs[pcnt++];
+	int numKT;
+	numKT=((int*)mxGetData(TrajLen))[0];
+
+	const mxArray *PMaps;
+    PMaps = prhs[pcnt++];       
+    std::complex<double> *pmap = ( std::complex<double> *) mxGetData(PMaps);
+
+	const mxArray *Segidx;
+	Segidx = prhs[pcnt++];       
+	int *segidx;
+	segidx=(int*) mxGetData(Segidx);
+
+	const mxArray *SegFil;
+	SegFil = prhs[pcnt++];       
+	double *segfil[numSeg];
+	for(j=0;j<numSeg;j++)
+	{
+		seg=mxGetCell(SegFil, j);
+		segfil[j]=(double*) mxGetData(seg);
+	}
+    //Modified by Sandy (End)
+    
+    const mxArray *Params;
+    Params = prhs[pcnt++];       
+    double *params = (double*) mxGetData(Params);
+    int numit = (int) params[0];
+    double lambda = params[1];
+    int device_num = (int) params[2];
+    double tol = params[3];
+    int VERBOSE = (int) params[4];
+    
+    if (VERBOSE == 1)  
+        mexPrintf("gpuDevice: %i  lambda^2: %f %d\n",device_num,lambda, MAX_BLOCK_SZ);
+	/**************** Init Cuda *****************/
+    
+    cudaError_t rv; 
+    CUdevice dev; 
+    
+    if (cuCtxGetDevice(&dev) == CUDA_SUCCESS)
+    {
+    //   CUcontext  pctx ;
+    //   cuCtxPopCurrent(&pctx);	      
+    }   
+    
+    mexPrintf("dev:%d\n",dev);
+
+    /******** Allocate mapped tmps for dot product calc **********/
+   
+    //	int dot_threads = 128;
+	int dot_threads = 128;
+
+	int dot_blocks = w*h*d/dot_threads;
+        mexPrintf("dot_blocks = %d\n",dot_blocks);
+	double *dot_z_h,*dot_z_d;
+	rv = cudaHostAlloc(&dot_z_h, dot_blocks*sizeof(double), cudaHostAllocMapped);
+
+	if (rv != cudaSuccess) {
+		mexPrintf("Call to cudaHostAlloc failed: %i\n",rv);
+		return;
+	} 
+	cudaHostGetDevicePointer(&dot_z_d, dot_z_h, 0);
+	cudaMemset(dot_z_d,0,dot_blocks*sizeof(double));
+   
+   
+    /////////////////////////////////////// MALLOCs
+    
+    double start,finish;
+     
+    GET_TIME(start);
+    //Modified by Sandy (Begin)
+    cufftDoubleComplex *tmp1, *tmp2, *tmp3, *tmp4;
+	cufftDoubleComplex *_r, *_d, *_z;
+	cufftDoubleComplex *_meas, *_sens, *_pmap;
+	cufftDoubleComplex *_ipk_we[numSeg], *tmpsens;
+
+    int *_the_index[numSeg];
+	double *_segfil[numSeg];
+	//Modified by Sandy (End)
+    cufftHandle            plan;
+    
+	plhs[0] = mxCreateNumericArray(numdim,dims_sz,mxGetClassID(Sens),mxREAL);
+     
+    std::complex<double> *res = (std::complex<double> *) mxGetData(plhs[0]);
+	cudaMalloc( (void **) &tmp1,sizeof(cufftDoubleComplex)*totsz_pad);
+	cudaMalloc( (void **) &tmp2,sizeof(cufftDoubleComplex)*totsz_pad);
+	cudaMalloc( (void **) &tmp3,sizeof(cufftDoubleComplex)*totsz_pad);
+	cudaMalloc( (void **) &tmp4,sizeof(cufftDoubleComplex)*totsz);
+
+    cudaMalloc( (void **) &_r,sizeof(cufftDoubleComplex)*totsz);
+    cudaMalloc( (void **) &_d,sizeof(cufftDoubleComplex)*totsz);
+    cudaMalloc( (void **) &_z,sizeof(cufftDoubleComplex)*totsz);
+    //Modified by Sandy (Begin)
+    cudaMalloc( (void **) &_meas,sizeof(cufftDoubleComplex)*numsens*numKT);
+    cudaMalloc( (void **) &_sens,sizeof(cufftDoubleComplex)*numsens*totsz);
+    cudaMalloc( (void **) &_pmap,sizeof(cufftDoubleComplex)*numSeg*totsz);
+	for(j=0;j<numSeg;j++)
+	{
+		cudaMalloc((void **)&_segfil[j],sizeof(double)*numK[j]);
+		cudaMalloc((void **)&_ipk_we[j],sizeof(cufftDoubleComplex)*numP*numK[j]);
+		cudaMalloc((void **)&_the_index[j],sizeof(int)*numP*numK[j]);
+	}
+    cudaMalloc((void **)&tmpsens,sizeof(cufftDoubleComplex)*numKT);
+    //Modified by Sandy (End)
+    cudaThreadSynchronize();
+   
+    cudaMemset( tmp1,0,sizeof(cufftDoubleComplex)*totsz_pad);
+    cudaMemset( tmp2,0,sizeof(cufftDoubleComplex)*totsz_pad);
+    cudaMemset( tmp3,0,sizeof(cufftDoubleComplex)*totsz_pad);
+    cudaMemset( tmp4,0,sizeof(cufftDoubleComplex)*totsz);
+    cudaMemset( _r,0,sizeof(cufftDoubleComplex)*totsz);
+    cudaMemset( _d,0,sizeof(cufftDoubleComplex)*totsz);
+    cudaMemset( _z,0,sizeof(cufftDoubleComplex)*totsz);
+ 
+    cudaThreadSynchronize();
+  
+     /************** copy data on device **********************/
+
+    cudaMemcpy(_meas, meas,
+			sizeof(cufftDoubleComplex)*numsens*numKT, cudaMemcpyHostToDevice);
+    cudaMemcpy(_sens, sens,
+			sizeof(cufftDoubleComplex)*numsens*totsz, cudaMemcpyHostToDevice);
+    //Modified by Sandy (Begin)
+    cudaMemcpy( _pmap, pmap,
+			sizeof(cufftDoubleComplex)*numSeg*totsz, cudaMemcpyHostToDevice);
+
+	for(j=0;j<numSeg;j++)
+	{
+        	cudaMemcpy( _segfil[j], segfil[j],
+				sizeof(double)*numK[j], cudaMemcpyHostToDevice);
+		cudaMemcpy(_ipk_we[j], ipk_we[j],
+				sizeof(cufftDoubleComplex)*numP*numK[j], cudaMemcpyHostToDevice);
+		cudaMemcpy(_the_index[j], ipk_index[j],
+				sizeof(int)*numP*numK[j], cudaMemcpyHostToDevice);
+		// what?  why?  jussi2020
+		cudaMemcpy(segfil[j], _segfil[j],
+			   sizeof(double)*numK[j], cudaMemcpyDeviceToHost);
+		cudaMemcpy(ipk_we[j], _ipk_we[j], 
+			   sizeof(cufftDoubleComplex)*numP*numK[j], cudaMemcpyDeviceToHost);
+		cudaMemcpy(ipk_index[j], _the_index[j],
+			   sizeof(int)*numP*numK[j], cudaMemcpyDeviceToHost);
+		
+	}
+    //Modified by Sandy (End)
+ 
+    cudaThreadSynchronize();
+    if (VERBOSE == 1) 
+        mexPrintf("numP: %i  numKT: %i whd %i %i %i pad %i %i %i numsens: %i\n",numP,numKT,w,h,d,w_pad,h_pad,d_pad,numsens);
+      
+    /************** copy bpidx on device **********************/
+    //Modified by Sandy (Begin)
+    int *_bpmidx[numSeg];
+    cufftDoubleComplex *_bpweight[numSeg];
+	int *_bpsize[numSeg], *_bponset[numSeg], *_bpidx[numSeg];
+
+	for(j=0;j<numSeg;j++)
+	{
+	
+		int *bpsize = (int*) malloc(sizeof(int)*numVox[j]);
+		int *bponset  = (int*) malloc(sizeof(int)*(numVox[j]+1));
+		bponset[0] = 0;
+		mxArray *BP_midx=mxGetCell(BPmidx, j); 
+		mxArray *BP_weight=mxGetCell(BPweight, j);
+
+		for (i=0;i<numVox[j];i++)
+		{
+			mxArray *Midx = mxGetCell(BP_midx,i);
+			bpsize[i] = mxGetM(Midx);
+			bponset[i+1] = bponset[i] + bpsize[i];
+		}
+		int *tmp_bpmidx; 
+		cufftDoubleComplex *tmp_bpweight;
+
+		tmp_bpmidx = (int*) malloc(sizeof(int)*bponset[numVox[j]]);
+		tmp_bpweight = (cufftDoubleComplex*) malloc(
+					sizeof(cufftDoubleComplex)*bponset[numVox[j]]
+					);
+    
+		if (tmp_bpmidx == 0)
+		{
+			mexPrintf("out of mem (host %d)\n", j);
+			return;
+		}
+		if (tmp_bpweight == 0)
+		{
+			mexPrintf("out of mem (host %d)\n", j);
+			return;
+		}
+
+		for (i=0;i<numVox[j];i++)
+		{
+			mxArray *Midx = mxGetCell(BP_midx,i);
+			mxArray *Weight = mxGetCell(BP_weight,i);
+
+			int *midx = (int*)  mxGetData(Midx);
+			cufftDoubleComplex *bpwei = (cufftDoubleComplex*) mxGetData(Weight);
+			memcpy(tmp_bpmidx + bponset[i] , midx, sizeof(int)* bpsize[i]);
+			memcpy(tmp_bpweight + bponset[i] , 
+				bpwei, sizeof(cufftDoubleComplex)* bpsize[i]);    
+		}
+      
+		cudaMalloc( (void **) &_bpmidx[j],
+				sizeof(int)* bponset[numVox[j]]);
+		cudaMalloc( (void **) &_bpweight[j],
+				sizeof(cufftDoubleComplex)* bponset[numVox[j]]);
+      
+		cudaMemcpy(_bpmidx[j],tmp_bpmidx,
+				sizeof(int)*bponset[numVox[j]],
+				cudaMemcpyHostToDevice);
+		cudaMemcpy(_bpweight[j],tmp_bpweight,
+				sizeof(cufftDoubleComplex)*bponset[numVox[j]], 
+				cudaMemcpyHostToDevice);
+    
+		cudaMalloc( (void **) &_bpsize[j],sizeof(int)* numVox[j]);   
+		cudaMalloc( (void **) &_bpidx[j],sizeof(int)* numVox[j]);
+		cudaMalloc( (void **) &_bponset[j],sizeof(int)* numVox[j]+1);    
+
+		cudaMemcpy(_bpidx[j],bpidx[j],
+				sizeof(int)* numVox[j], cudaMemcpyHostToDevice);
+		cudaMemcpy(_bpsize[j],bpsize,
+				sizeof(int)* numVox[j], cudaMemcpyHostToDevice);
+		cudaMemcpy(_bponset[j],bponset,
+				sizeof(int)* numVox[j]+1, cudaMemcpyHostToDevice);
+
+		free(tmp_bpmidx);
+    	free(tmp_bpweight);
+    	free(bpsize);
+    	free(bponset);
+	}
+    cudaThreadSynchronize();
+    //Modified by Sandy (End)
+
+            
+    GET_TIME(finish);
+
+    /*
+      if (VERBOSE == 1) {
+        mexPrintf("num active Vox: %d\n",numVox);    
+        mexPrintf("alloc/copy time: %f\n",finish-start);
+    }
+    */
+    cufftPlan3d(&plan, d_pad, h_pad, w_pad, CUFFT_Z2Z) ;
+        
+    // thread managements 
+    //    int vx_block = 128;
+    int vx_block = 128;
+    dim3 dimBlock_vx(vx_block,1);
+//    mexPrintf("numSeg: %d\n",numSeg);    
+    dim3 dimGrid_vx[numSeg];
+	for(j=0;j<numSeg;j++)
+	{
+		dimGrid_vx[j]=dim3(numVox[j]/vx_block + 1,1);
+	}
+
+    dim3 dimBlock_dw(d,1);
+    dim3 dimGrid_dw (w,h);
+
+    dim3 dimBlock_sq(d,1);
+    dim3 dimGrid_sq (w*h,1);
+  
+    // for sensing 
+    //    int sens_block = 256;
+
+    int sens_block = 256;
+	dim3 dimGrid_se_1(numKT/sens_block + 1,1);
+    dim3 dimBlock_se(sens_block,1);
+	dim3 dimGrid_se[numSeg];
+	for(j=0;j<numSeg;j++)
+	{
+		dimGrid_se[j]=dim3(numK[j]/sens_block + 1,1);
+	}
+    
+    double AA_time = 0;
+    double cg_time = 0;
+     
+    int err;
+   
+    double normrr = 0;
+    double dAAd = 0;
+    double alpha = 0;
+    double normrr2 = 0;
+    double beta = 0;
+	double sc=1.0/sqrt(double(totsz));
+      
+    /////////////////////////////////////////////////////// init CG
+    
+
+    // we need this because first fft fails
+    int _res = cufftExecZ2Z(plan, tmp1, tmp2, CUFFT_FORWARD) ;
+    if (VERBOSE == 1)
+      mexPrintf("first fft call ret: %i\n",_res);
+    _res = cufftExecZ2Z(plan, tmp1, tmp2, CUFFT_INVERSE) ;
+    if (VERBOSE == 1)
+      mexPrintf("second fft call ret: %i\n",_res);
+
+    cudaMemset(_r,0, sizeof(cufftDoubleComplex)*totsz);
+    cudaMemset(_z,0, sizeof(cufftDoubleComplex)*totsz);   
+   
+	cudaMemset(tmp2,0,sizeof(cufftDoubleComplex)*totsz_pad);
+
+    mexPrintf("dimBlock_vx: %i\n",dimBlock_vx);    
+
+    //Modified by Sandy (Begin)            
+    // backproject measurement -- x=A'b
+    for(i=0;i<numsens;i++)
+    { 
+		cudaMemset(tmp3, 0, sizeof(cufftDoubleComplex)*totsz_pad);
+		for(j=0;j<numSeg;j++)
+		{
+			cudaMemset(tmp1, 0, sizeof(cufftDoubleComplex)*totsz_pad);
+			//			mexPrintf("dimGrid_vx[%i]: %i\n", j, dimGrid_vx[j]);    
+			backprojVX<<<dimGrid_vx[j], dimBlock_vx>>>(
+				_bpidx[j], 
+				_bponset[j], _bpweight[j], 
+				_bpmidx[j], _bpsize[j],
+				_meas + i*numKT+segidx[j], _segfil[j],
+				tmp1, numVox[j]);
+			cudaThreadSynchronize();
+			if (err=cufftExecZ2Z(plan, tmp1, tmp2, CUFFT_INVERSE)
+				!=CUFFT_SUCCESS)
+			{
+				mexPrintf("1) cufft has failed with err %i \n",err);
+				return;
+			}    
+			cudaThreadSynchronize();
+
+			downwind<<<dimGrid_dw,dimBlock_dw>>>(tmp3, tmp2, 
+				_pmap + j*totsz, 
+				w_pad, h_pad, d_pad, 
+				w_pad, h_pad, d_pad);
+			cudaThreadSynchronize();
+		}
+		cudaThreadSynchronize();
+		downwind<<<dimGrid_dw,dimBlock_dw>>>(_r, tmp3,
+			_sens + i*totsz, w, h, d, w_pad, h_pad, d_pad);
+    }
+	cudaThreadSynchronize();
+    scmult<<<dimGrid_sq,dimBlock_sq>>>(_r, _r, sc, totsz);
+  
+    cudaMemcpy( res, _r, sizeof(cufftDoubleComplex)*totsz,cudaMemcpyDeviceToHost);    
+    cudaMemcpy( _d, _r, sizeof(cufftDoubleComplex)*totsz,cudaMemcpyDeviceToDevice);
+     
+    
+    normrr = Dot_wrapper(_r, _r, 
+		dot_z_d, dot_z_h, totsz, 
+		dot_blocks, dot_threads);
+    cudaThreadSynchronize();
+    //Modified by Sandy (End)
+
+    //normrr = cublasCdotc(totsz,(cuComplex*)_r,1,(cuComplex*)_r,1).x;           
+     
+    double normrr0 = normrr;
+    if (VERBOSE == 1)
+        mexPrintf("first residual: %f\n",normrr0);
+   
+    
+    ////////////////////////////////////////////////////////////// start CG
+    GET_TIME(start);
+
+    int it = 0;   
+    for (it = 0; it < numit; it++)
+    {
+     
+		cudaMemset(tmp4, 0, sizeof(cufftDoubleComplex)*totsz_pad);
+        
+        for (i=0;i<numsens;i++)
+        {
+			cudaMemset(tmpsens, 0, sizeof(cufftDoubleComplex)*numKT);
+			cudaMemset(tmp1, 0, sizeof(cufftDoubleComplex)*totsz_pad);
+
+			upwind<<<dimGrid_dw,dimBlock_dw>>>(tmp1, _d, 
+				_sens + i*totsz,
+				w, h, d,
+				w_pad, h_pad, d_pad);
+
+            for(j=0;j<numSeg;j++)
+			{
+				cudaMemset(tmp2,0, sizeof(cufftDoubleComplex)*totsz_pad);
+				upwind<<<dimGrid_dw,dimBlock_dw>>>(tmp2, tmp1, 
+					_pmap + j*totsz,
+					w_pad, h_pad, d_pad,
+					w_pad, h_pad, d_pad);
+				if (err=cufftExecZ2Z(plan, tmp2, tmp3, CUFFT_FORWARD) 
+					!= CUFFT_SUCCESS)
+				{
+					mexPrintf("2) cufft has failed with err %i \n",err);
+					return;
+				dosens<<<dimGrid_se[j],dimBlock_se>>>(tmpsens+segidx[j],
+					tmp3, _segfil[j],
+					_ipk_we[j], _the_index[j],
+					numP, numK[j]);
+				}
+			}
+
+			scmult<<<dimGrid_se_1,dimBlock_se>>>(tmpsens, tmpsens, sc, numKT);
+
+			cudaMemset(tmp3, 0, sizeof(cufftDoubleComplex)*totsz_pad);
+
+            for(j=0;j<numSeg;j++)
+			{
+				cudaMemset(tmp1,0, sizeof(cufftDoubleComplex)*totsz_pad);
+				backprojVX<<<dimGrid_vx[j],dimBlock_vx>>>(
+					_bpidx[j], _bponset[j], _bpweight[j],
+					_bpmidx[j], _bpsize[j],
+					tmpsens+segidx[j], _segfil[j],
+					tmp1,numVox[j]);
+                        
+				if (err=cufftExecZ2Z(plan, tmp1, tmp2, CUFFT_INVERSE) !=
+					CUFFT_SUCCESS)
+				{
+					mexPrintf("3) cufft has failed with err %i \n",err);
+					return;
+				}
+				downwind<<<dimGrid_dw,dimBlock_dw>>>(tmp3, tmp2, 
+					_pmap + j*totsz,
+					w_pad, h_pad, d_pad,
+					w_pad, h_pad, d_pad);           
+			}
+			cudaThreadSynchronize();
+
+			downwind<<<dimGrid_dw,dimBlock_dw>>>(tmp4, tmp3, 
+				_sens + i*totsz, 
+				w, h, d, 
+				w_pad, h_pad, d_pad);       
+        }
+        
+		scmult<<<dimGrid_sq,dimBlock_sq>>>(tmp4, tmp4, sc, totsz);
+
+		diff11<<<dimGrid_dw,dimBlock_dw>>>(tmp1, _d, w, h, d);
+		diff12<<<dimGrid_dw,dimBlock_dw>>>(tmp2, tmp1, w, h, d);
+
+        scpm<<<dimGrid_sq,dimBlock_sq>>>(tmp4, tmp2, lambda, totsz);
+
+		diff21<<<dimGrid_dw,dimBlock_dw>>>(tmp1, _d, w, h, d);
+		diff22<<<dimGrid_dw,dimBlock_dw>>>(tmp2, tmp1, w, h, d);
+
+        scpm<<<dimGrid_sq,dimBlock_sq>>>(tmp4, tmp2, lambda, totsz);
+
+		diff31<<<dimGrid_dw,dimBlock_dw>>>(tmp1, _d, w, h, d);
+		diff32<<<dimGrid_dw,dimBlock_dw>>>(tmp2, tmp1, w, h, d);
+
+        scpm<<<dimGrid_sq,dimBlock_sq>>>(tmp4, tmp2, lambda, totsz);
+        GET_TIME(finish); AA_time += finish-start;
+               
+        GET_TIME(start);    
+        dAAd = Dot_wrapper(_d, tmp4, 
+				dot_z_d, dot_z_h, totsz,
+				dot_blocks, dot_threads);        
+        cudaThreadSynchronize();
+        //dAAd = cublasCdotc(totsz,(cuComplex*)_d,1,(cuComplex*)tmp4,1).x;
+     
+        alpha = normrr/dAAd;        
+
+        scpm<<<dimGrid_sq,dimBlock_sq>>>(_z, _d,    alpha, totsz);
+        cudaThreadSynchronize();
+        scpm<<<dimGrid_sq,dimBlock_sq>>>(_r, tmp4, -alpha, totsz);
+        cudaThreadSynchronize();
+
+        normrr2 = Dot_wrapper(_r, _r, 
+				dot_z_d, dot_z_h, totsz, 
+				dot_blocks, dot_threads);   
+        cudaThreadSynchronize();
+        //normrr2 = cublasCdotc(totsz,(cuComplex*)_r,1,(cuComplex*)_r,1).x;     
+
+        beta = normrr2/normrr;
+        normrr = normrr2;        
+        scmultplus<<<dimGrid_sq,dimBlock_sq>>>(_d, _r, beta, totsz);
+        
+        GET_TIME(finish);  cg_time += finish-start;
+       
+        if (sqrt(normrr/normrr0) < tol)
+            break;       
+        
+        if (VERBOSE == 1)  
+            mexPrintf("tol: %f\n",sqrt(normrr/normrr0));
+
+        mexPrintf(".");mexEvalString("drawnow");
+    }
+         
+    if (VERBOSE == 1)
+    {
+        mexPrintf("\n");        
+        mexPrintf(" Convergence at iteration: %d \n",it);
+        mexPrintf(" AA time: %f \n",AA_time);
+        mexPrintf(" cg  time: %f \n",cg_time);
+    }
+        
+    cudaMemcpy( res, _z,
+		sizeof(cufftDoubleComplex)*totsz,cudaMemcpyDeviceToHost);
+
+    cudaFree(tmp1);
+    cudaFree(tmp2);
+    cudaFree(tmp3);
+    cudaFree(tmp4);
+    cudaFree(tmpsens);
+
+    cudaFree(_r); 
+    cudaFree(_d);
+    cudaFree(_z);
+
+    cudaFree(_meas);
+    cudaFree(_sens);
+	cudaFree(_pmap);
+
+	for(j=0;j<numSeg;j++)
+	{
+		cudaFree(_segfil[j]);
+		cudaFree(_ipk_we[j]);
+		cudaFree(_the_index[j]);
+	
+		cudaFree(_bpmidx[j]);
+		cudaFree(_bpweight[j]);
+		cudaFree(_bpsize[j]);
+		cudaFree(_bpidx[j]);
+		cudaFree(_bponset[j]);    
+	}
+    cufftDestroy(plan);
+
+    CUcontext  pctx ;
+    cuCtxPopCurrent(&pctx);	
+}

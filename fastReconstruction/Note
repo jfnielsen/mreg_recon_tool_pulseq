@@ -1,0 +1,8 @@
+Measurement    -> b_il
+SensMaps       -> Sens
+Sparse Index   -> Ipk_index, the_index
+Sparse Weight  -> Ipk_we
+3D Dims ipk.Dd -> Dims_pad, w_pad, h_pad, d_pad, totsz_pad
+bp_vxidx       -> BPidx
+bp_midx        -> BPmidx
+bp_weight      -> BPweight

@@ -60,6 +60,7 @@ D.recon.recon_details.DORK_frequency = [];
 D.recon.recon_details.DORK_k0 = [];
 D.recon.recon_details.global_frequency_shift = 0;
 D.recon.recon_details.DeltaT = 0;
+D.recon.recon_details.GPU = 0;
 
 D.param.recon_dimension = 3; % by default it is assumed that the reconstructed image will be 3D
 D.param.sensmode = 'adapt';
@@ -176,6 +177,8 @@ p = get(H.DORK_cb,'Position');
 H.global_or_shift_t = uicontrol(H.main_fig,'Style','Text','Parent',H.recon_panel,'String','4D Global ORC [rad/s]','Position',[spacing,p(2)-tb_height-spacing,pb_width,tb_height],'HorizontalAlignment','left');
 H.global_or_shift_e = uicontrol(H.main_fig,'Style','Edit','Parent',H.recon_panel,'String','0','Position',[spacing,p(2)-pb_height-tb_height-spacing,pb_width,pb_height],'BackgroundColor','white','Callback',{@global_or_shift_e_cb},'Callback',{@global_or_shift_e_cb});
 p = get(H.global_or_shift_e,'Position');
+H.use_gpu_cb = uicontrol(H.main_fig,'Style','CheckBox','Parent',H.recon_panel,'String','Use CUDA','Value',0,'Position',[spacing,p(2)-cb_height-spacing,cb_width,cb_height],'Callback',{@use_gpu_cb_cb});
+p = get(H.use_gpu_cb,'Position');
 %H.use_gridengine_cb = uicontrol(H.main_fig,'Style','CheckBox','Parent',H.recon_panel,'String','Use GridEngine','Value',0,'Position',[spacing,p(2)-cb_height-spacing,cb_width,cb_height],'Callback',{@use_gridengine_cb_cb});
 %p = get(H.use_gridengine_cb,'Position');
 H.use_slurm_cb = uicontrol(H.main_fig,'Style','CheckBox','Parent',H.recon_panel,'String','Use Slurm','Value',0,'Position',[spacing,p(2)-cb_height-spacing,cb_width,cb_height],'Callback',{@use_slurm_cb_cb});
@@ -225,6 +228,7 @@ D.recon.recon_details.recon_output_format = D.gui_data.recon_output_format_strin
 set(H.sensmode_pm,'Value',2);
 
 D.param.frames_per_job = str2num(get(H.frames_per_job_e,'String'));
+D.param.use_gpu = get(H.use_gpu_cb,'Value');
 %D.param.use_gridengine = get(H.use_gridengine_cb,'Value');
 D.param.use_slurm = get(H.use_slurm_cb,'Value');
 
@@ -263,6 +267,7 @@ if nargin==1
         adjust_reference_and_trajectory_pb_cb([],[]);
         temporal_recon_type_pm_cb([],[],settings.recon.recon_details.recon_type);
         offresonance_correction_cb_cb([],[],settings.recon.recon_details.offresonance_correction_flag);
+        use_gpu_cb_cb([],[],settings.param.use_gpu);
 %        use_gridengine_cb_cb([],[],settings.param.use_gridengine);
         use_slurm_cb_cb([],[],settings.param.use_slurm);
         frames_per_job_e_cb([],[],settings.param.frames_per_job);
@@ -971,6 +976,23 @@ clear slurmnotfound slurmfoundpath;
 %         end
 %     end
 
+     function use_gpu_cb_cb(hobj, eventdata, val)
+         if nargin<=2
+             D.param.use_gpu= get(H.use_gpu_cb,'Value');
+         else
+             set(H.use_gpu_cb,'Value',val);
+             D.param.use_gpu = val;
+         end
+         
+%         if D.param.use_gpu==1
+%             set(H.frames_per_job_e,'Enable','on');
+%             set(H.save_during_recon_cb,'Enable','off','Visible','off');
+%         else
+%             set(H.frames_per_job_e,'Enable','off');
+%             set(H.save_during_recon_cb,'Enable','on','Visible','on');
+%         end
+     end
+
 %%%%%%%%%%%%
     function use_slurm_cb_cb(hobj, eventdata, val)
         if nargin<=2
@@ -1061,6 +1083,10 @@ clear slurmnotfound slurmfoundpath;
             data.ref_header = D.reference.header;
             data.sensmode   = D.reference.sensmode;
             data.trajectory = D.trajectory;
+
+            if D.param.use_gpu==1
+                 local_set_status('Using GPU for reconstruction');						    
+            end
                                
 %            if D.param.use_gridengine==1
 %                local_set_status('Submitting jobs to gridengine ...');
@@ -1663,7 +1689,7 @@ clear slurmnotfound slurmfoundpath;
         D.recon.recon_details.z0_details = [];
         D.gui_data.z0_details = [];
         set(H.z0_cb, 'Value', 0);
-        
+	D.recon.recon_details.GPU = get(H.use_gpu_cb,'Value');
     end
 
 %%%%%%%%%%%%
