@@ -81,7 +81,7 @@ fid=fopen(filename,'w+');
     else
         fprintf(fid,'Field_Of_View_[mm] %g \n',1000*T(1).fov);
     end
-    fprintf(fid,'Base_Resolution %g %g %g \n',T(1).N);
+    fprintf(fid,'Base_Resolution %g \n',T(1).N);
     fprintf(fid,'TE_[micros] %g \n',T(1).TE);
     fprintf(fid,'Dwell_[ns] %g \n',dwell);
     if isVD
