@@ -28,7 +28,7 @@ warning('OFF', 'mr:restoreShape')
 % homogeneous excitation
 flipangle = 25/180*pi;   %set flip angle in rad
 sliceThickness = 150;    %set slice thickness (slab excitation)
-[rf, gz, gzReph] = mr.makeSincPulse(flipangle,'system',sys,'Duration',1e-3,...
+[rf, gz, gzReph] = mr.makeSincPulse(flipangle,'system',sys,'Duration',1.4e-3,...
     'SliceThickness',0.001*sliceThickness*0.8,'apodization',0.5,'timeBwProduct',16);
 
 %% create mreg trajectory & adc
