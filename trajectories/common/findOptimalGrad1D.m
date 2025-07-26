@@ -62,5 +62,5 @@ function [x exitflag]=findOptimalGrad1D(N,SYS,grad,targets)
   options = optimset('Display','off'); 
   options.Algorithm = 'interior-point'; %this looks quite a bit
 %  different...?
-[x a exitflag] = linprog(f,A,b,Aeq,beq,lb,ub,[],options);
+[x a exitflag] = linprog(f,A,b,Aeq,beq,lb,ub,options);
 end
