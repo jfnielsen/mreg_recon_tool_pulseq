@@ -1,25 +1,76 @@
 %%This is a demo MREG sequence
+%
+% Changes for GE 
+%  - Add TRID label
+%  - Don't include blocks containing only labels
+%  - Set sys struct (raster times etc) for GE hardware
+%  - Interpolate gradient waveform
 
+vendor = 'GE';   % 'GE' or 'Siemens'
+
+isGE = strcmp(upper(vendor(1)), 'G');
+isSiemens = strcmp(upper(vendor(1)), 'S');
 
 seq = mr.Sequence(); %create a new sequence object
 FOV = 192;           %define FOV and resolution in mm
 Resolution = 3;
 TR = 100e-3;         %set TR in ms
+
 %% set system limits
 % the spoiler at the end often causes PNS problems, therefore the max slew
 % rate can be set independently
-dG=250e-6;
-sys = mr.opts('MaxGrad', 38, 'GradUnit', 'mT/m', ...
-    'MaxSlew', 170, 'SlewUnit', 'T/m/s', 'rfRingdownTime', 10e-6, ...
-    'rfDeadTime', 100e-6, 'adcDeadTime', 10e-6);
+%dG=250e-6;
+maxGrad = 38;  % mT/m
+rfDeadTime = 100e-6;
+rfRingdownTime = 60e-6;
+adcDeadTime = 40e-6;
+adcRasterTime = 2e-6;
+rfRasterTime = 2e-6;
+gradRasterTime = 4e-6;
+blockDurationRaster = 4e-6;
+B0 = 3;    % T
 
-sys_true = mr.opts('MaxGrad', 38, 'GradUnit', 'mT/m', ...
-    'MaxSlew', 200, 'SlewUnit', 'T/m/s', 'rfRingdownTime', 10e-6, ...
-    'rfDeadTime', 100e-6, 'adcDeadTime', 10e-6);
+%sys = mr.opts('MaxGrad', 38, 'GradUnit', 'mT/m', ...
+%    'MaxSlew', 170, 'SlewUnit', 'T/m/s', 'rfRingdownTime', 10e-6, ...
+%    'rfDeadTime', 100e-6, 'adcDeadTime', 10e-6);
+sys = mr.opts('maxGrad', maxGrad, 'gradUnit','mT/m', ... 
+              'maxSlew', 170, 'slewUnit', 'T/m/s', ... 
+              'rfDeadTime', rfDeadTime, ...
+              'rfRingdownTime', rfRingdownTime, ...
+              'adcDeadTime', adcDeadTime, ...
+              'adcRasterTime', adcRasterTime, ...
+              'rfRasterTime', rfRasterTime, ...
+              'gradRasterTime', gradRasterTime, ...
+              'blockDurationRaster', blockDurationRaster, ...
+              'B0', B0);
 
-sys_spoiler = mr.opts('MaxGrad', 38, 'GradUnit', 'mT/m', ...
-    'MaxSlew', 60, 'SlewUnit', 'T/m/s', 'rfRingdownTime', 10e-6, ...
-    'rfDeadTime', 100e-6, 'adcDeadTime', 10e-6);
+%sys_true = mr.opts('MaxGrad', 38, 'GradUnit', 'mT/m', ...
+%    'MaxSlew', 200, 'SlewUnit', 'T/m/s', 'rfRingdownTime', 10e-6, ...
+%    'rfDeadTime', 100e-6, 'adcDeadTime', 10e-6);
+sys_true = mr.opts('maxGrad', maxGrad, 'gradUnit','mT/m', ... 
+              'maxSlew', 200, 'slewUnit', 'T/m/s', ... 
+              'rfDeadTime', rfDeadTime, ...
+              'rfRingdownTime', rfRingdownTime, ...
+              'adcDeadTime', adcDeadTime, ...
+              'adcRasterTime', adcRasterTime, ...
+              'rfRasterTime', rfRasterTime, ...
+              'gradRasterTime', gradRasterTime, ...
+              'blockDurationRaster', blockDurationRaster, ...
+              'B0', B0);
+
+%sys_spoiler = mr.opts('MaxGrad', 38, 'GradUnit', 'mT/m', ...
+%    'MaxSlew', 60, 'SlewUnit', 'T/m/s', 'rfRingdownTime', 10e-6, ...
+%    'rfDeadTime', 100e-6, 'adcDeadTime', 10e-6);
+sys_spoiler = mr.opts('maxGrad', maxGrad, 'gradUnit','mT/m', ... 
+              'maxSlew', 60, 'slewUnit', 'T/m/s', ... 
+              'rfDeadTime', rfDeadTime, ...
+              'rfRingdownTime', rfRingdownTime, ...
+              'adcDeadTime', adcDeadTime, ...
+              'adcRasterTime', adcRasterTime, ...
+              'rfRasterTime', rfRasterTime, ...
+              'gradRasterTime', gradRasterTime, ...
+              'blockDurationRaster', blockDurationRaster, ...
+              'B0', B0);
 
 warning('OFF', 'mr:restoreShape')
 %% RF 
@@ -38,6 +89,8 @@ sliceThickness = 150;    %set slice thickness (slab excitation)
 R = [2.8687 6.0202 2.552 3.0584];
 
 T = stack_of_spirals(R,1,1,0.001*FOV,0.001*Resolution,1); 
+%TODO: interpolate to 4us
+return
 trajectStruct_export(T,'2025_Pulsec_SoS',1);% g unit T/m to mT/m, normalized
 Grads_calc = -T.G'*sys.gamma;
 
@@ -94,16 +147,20 @@ gz_spoil=mr.makeTrapezoid('z',sys,'Area',-10*1000,'system',sys_spoiler);
 seq = mr.Sequence(sys);
 %seq.addBlock(rf_fs,gz_fs)
 %seq.addBlock(gz_spoil)
-seq.addBlock(rf,gz)
+seq.addBlock(rf,gz, mr.makeLabel('SET', 'TRID', 1));
 seq.addBlock(gzReph)
 
 %turn off FOV shifting for readout
 nopos_label = mr.makeLabel('SET', 'NOPOS', 1);
-seq.addBlock(nopos_label);
+if ~isGE
+    seq.addBlock(nopos_label);
+end
 seq.addBlock(mregx,mregy,mregz,adc)
 %switch back on for spoiler
 nopos_label_off = mr.makeLabel('SET', 'NOPOS',0);
-seq.addBlock(nopos_label_off);
+if ~isGE
+    seq.addBlock(nopos_label_off);
+end
 seq.addBlock(gx_spoil,gy_spoil,gz_spoil)
 delayTR = TR - mr.calcDuration(mregx,adc)-mr.calcDuration(rf,gz)-mr.calcDuration(gzReph)-mr.calcDuration(gz_spoil);
 seq.addBlock(mr.makeDelay(delayTR));
@@ -113,7 +170,7 @@ TEs(:,2) = T.TE  .* 0.000001 + TEs(:,1);
 seq.setDefinition('TE',TEs);% TEs is the array of TE (max. array size = 32, only first 2 matter for MREG). Unit: second
 seq.plot('showblocks',1)
 %% new single-function call for trajectory calculation
-[ktraj_adc, t_adc, ktraj, t_ktraj, t_excitation, t_refocusing] = seq.calculateKspacePP();
+%[ktraj_adc, t_adc, ktraj, t_ktraj, t_excitation, t_refocusing] = seq.calculateKspacePP();
 
 %plot trajectory if wanted
 % figure; hold on;
@@ -135,5 +192,5 @@ seq.setDefinition('Name', 'mreg_FOV');
 %seq.setDefinition('ReceiverGainHigh',1) ;
 seq.write('myMREG_FOV.seq');   % Output sequence for scanner
 %seq.install('Siemens')
-rep = seq.testReport;
-fprintf([rep{:}]);
+%rep = seq.testReport;
+%fprintf([rep{:}]);
