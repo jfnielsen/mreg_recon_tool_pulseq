@@ -88,9 +88,18 @@ sliceThickness = 150;    %set slice thickness (slab excitation)
 %simulated using the script stack_of_spirals_psf.m
 R = [2.8687 6.0202 2.552 3.0584];
 
-T = stack_of_spirals(R,1,1,0.001*FOV,0.001*Resolution,1); 
+T = stack_of_spirals(R,1,1,0.001*FOV,0.001*Resolution,1); % designed on 10us gradient raster
+
+% interpolate to 4us
 %TODO: interpolate to 4us
-return
+n = length(T.G);
+ttIn = 10e-6*(1/2+[1:n]);  % sampled on center of raster intervals
+ttOut = 4e-6/2:4e-6:(10e-6*n);
+G = zeros(length(ttOut), 3);
+G(:,1) = interp1(ttIn, T.G(:,1), ttOut, 'linear', 'extrap');
+G(:,2) = interp1(ttIn, T.G(:,2), ttOut, 'linear', 'extrap');
+G(:,3) = interp1(ttIn, T.G(:,3), ttOut, 'linear', 'extrap');
+T.G = G;
 trajectStruct_export(T,'2025_Pulsec_SoS',1);% g unit T/m to mT/m, normalized
 Grads_calc = -T.G'*sys.gamma;
 
