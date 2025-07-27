@@ -4,7 +4,7 @@
 %  - Add TRID label
 %  - Don't include blocks containing only labels
 %  - Set sys struct (raster times etc) for GE hardware
-%  - Interpolate gradient waveform
+%  - Interpolate gradient waveform to 4us
 
 vendor = 'GE';   % 'GE' or 'Siemens'
 
