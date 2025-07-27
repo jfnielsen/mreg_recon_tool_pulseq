@@ -14,7 +14,7 @@ isSiemens = strcmp(upper(vendor(1)), 'S');
 seq = mr.Sequence(); %create a new sequence object
 FOV = 192;           %define FOV and resolution in mm
 Resolution = 3;
-TR = 100e-3;         %set TR in ms
+TR = 120e-3;         %set TR in ms
 
 %% set system limits
 % the spoiler at the end often causes PNS problems, therefore the max slew
