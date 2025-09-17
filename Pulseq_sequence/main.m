@@ -1,4 +1,4 @@
-addpath(genpath('.'));
+addpath(genpath('..'));
 
 % actions
 createSequenceFile = true;
@@ -13,21 +13,26 @@ if createSequenceFile
     MREG_github_FOV;
 
     % Convert .seq file to a PulCeq (Ceq) object
-    system('git clone --branch v2.4.1 git@github.com:HarmonizedMRI/PulCeq.git');
-    addpath PulCeq/matlab
+    %system('git clone --branch v2.4.1 git@github.com:HarmonizedMRI/PulCeq.git');
+    %system('git clone --branch tv7_dev git@github.com:HarmonizedMRI/PulCeq.git');
+    %addpath PulCeq/matlab
+    addpath ~/github/HarmonizedMRI/PulCeq/matlab
+
     ceq = seq2ceq([ fn '.seq']);
 
     % Check the ceq object:
     % Define hardware parameters, and
     % check if 'ceq' is compatible with the parameters in 'sys'
-    psd_rf_wait = 150e-6;  % RF-gradient delay, scanner specific (s)
-    psd_grd_wait = 120e-6; % ADC-gradient delay, scanner specific (s)
+    psd_rf_wait = 58e-6;  % RF-gradient delay, scanner specific (s)
+    psd_grd_wait = 60e-6; % ADC-gradient delay, scanner specific (s)
     b1_max = 0.25;         % Gauss
     g_max = 5;             % Gauss/cm
     slew_max = 20;         % Gauss/cm/ms
     gamma = 4.2576e3;      % Hz/Gauss
     sys = pge2.getsys(psd_rf_wait, psd_grd_wait, b1_max, g_max, slew_max, gamma);
-    pge2.validate(ceq, sys);
+    %pge2.validate(ceq, sys);
+
+    pge2.plot(ceq, sys, 'timeRange', [0 inf]);
 
     % Write ceq object to file.
     % pislquant is the number of ADC events used to set receive gain in Auto Prescan
