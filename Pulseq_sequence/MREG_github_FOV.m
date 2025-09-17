@@ -103,8 +103,8 @@ T.G = G;
 trajectStruct_export(T,'2025_Pulsec_SoS',1);% g unit T/m to mT/m, normalized
 Grads_calc = -T.G'*sys.gamma;
 
-adcSamples = length(Grads_calc)*2; % oversampling is usually 2
-dW=sys.gradRasterTime/2;
+adcSamples = length(Grads_calc)*1; % no oversampling since max num samples is 32768
+dW=sys.gradRasterTime/1;
 % the adc should be splittable into N equal parts, each of which is aligned
 % to the gradient raster. each segment however needs to have the number of
 % samples divisible by 4 to be executable on siemens scanners
