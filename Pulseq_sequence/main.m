@@ -5,7 +5,7 @@ end
 fn = 'mreg';
 
 % write the .seq file
-%MREG_github_FOV;
+MREG_github_FOV;
 
 % convert to ceq object
 ceq = seq2ceq([fn '.seq']); %, 'usesRotationEvents', true);
@@ -29,7 +29,7 @@ pars = pge2.check(ceq, sysGE);
 
 % Check mechanical resonances (forbidden frequency bands)
 S = pge2.plot(ceq, sysGE, 'timeRange', [0 0.1], 'rotate', true, 'interpolate', true);
-check_grad_acoustics(S.gx.signal/100, 'xrm');   % MR750: 'xrm'; UHP: 'hrmbuhp'
+%check_grad_acoustics(S.gx.signal/100, 'xrm');   % MR750: 'xrm'; UHP: 'hrmbuhp'
 
 % Write ceq object to file.
 % pislquant is the number of ADC events used to set Rx gains in Auto Prescan
