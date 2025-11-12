@@ -199,7 +199,7 @@ seq.setDefinition('FOV', 0.001*[FOV FOV sliceThickness]);
 seq.setDefinition('MaxAdcSegmentLength', adcSamplesPerSegment); 
 seq.setDefinition('Name', 'mreg_FOV');
 %seq.setDefinition('ReceiverGainHigh',1) ;
-seq.write('myMREG_FOV.seq');   % Output sequence for scanner
+seq.write([fn '.seq']);   % Output sequence for scanner
 %seq.install('Siemens')
 %rep = seq.testReport;
 %fprintf([rep{:}]);
