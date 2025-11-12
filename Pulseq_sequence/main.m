@@ -33,7 +33,7 @@ S = pge2.plot(ceq, sysGE, 'timeRange', [0 0.1], 'rotate', true, 'interpolate', t
 
 % Write ceq object to file.
 % pislquant is the number of ADC events used to set Rx gains in Auto Prescan
-writeceq(ceq, [ fn '.pge'], 'pislquant', 10);
+writeceq(ceq, [ fn '.pge'], 'pislquant', 2);
 
 return
 
