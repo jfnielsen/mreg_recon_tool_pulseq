@@ -25,7 +25,11 @@ sysGE = pge2.getsys(psd_rf_wait, psd_grd_wait, b1_max, g_max, slew_max, coil);
 pars = pge2.check(ceq, sysGE);
 
 % Plot the beginning of the sequence
-S = pge2.plot(ceq, sysGE, 'timeRange', [0 0.1], 'rotate', false);
+%S = pge2.plot(ceq, sysGE, 'timeRange', [0 0.1], 'rotate', false);
+
+% Check mechanical resonsances (forbidden frequency bands)
+S = pge2.plot(ceq, sysGE, 'timeRange', [0 0.1], 'rotate', true, 'interpolate', true);
+check_grad_acoustics(S.gx.signal/100, 'xrm');   % MR750: 'xrm'; UHP: 'hrmbuhp'
 
 return
 
